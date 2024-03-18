@@ -1,0 +1,280 @@
+﻿Program.Sub.ScreenSU.Start
+Gui.frmMain..Create(DashForm)
+Gui.frmMain..Size(1089,776)
+Gui.frmMain..MinX(1016)
+Gui.frmMain..MinY(696)
+Gui.frmMain..Position(0,0)
+Gui.frmMain..BackColor(-2147483633)
+Gui.frmMain..MousePointer(0)
+Gui.frmMain..Event(UnLoad,frmMain_UnLoad)
+Gui.frmMain..Caption("Stocking Bin Status Dashboard")
+Gui.frmMain..AlwaysOnTop(False)
+Gui.frmMain..FontName("Tahoma")
+Gui.frmMain..FontSize(8.25)
+Gui.frmMain..ControlBox(True)
+Gui.frmMain..MaxButton(True)
+Gui.frmMain..MinButton(True)
+Gui.frmMain..Moveable(True)
+Gui.frmMain..Sizeable(True)
+Gui.frmMain..ShowInTaskBar(True)
+Gui.frmMain..TitleBar(True)
+Gui.frmMain..BarExportButton(True)
+Gui.frmMain..BarRefreshButton(True)
+Gui.frmMain..BarSearchBox(False)
+Gui.frmMain..Event(ExportClick,frmMain_ExportClick)
+Gui.frmMain..Event(RefreshClick,frmMain_RefreshClick)
+Gui.frmMain..BarAddButton("ResetGridLayout","Reset Grid Layout",V.Enum.Image!LAYOUT_RESET_COLOR)
+Gui.frmMain..BarAddButton("SaveGridLayout","Save Grid Layout",V.Enum.Image!LAYOUT_SAVE_COLOR)
+Gui.frmMain..Event(UserButtonClicked,frmMain_UserButtonClicked)
+Gui.frmMain.GsGCData.Create(GsGridControl)
+Gui.frmMain.GsGCData.Enabled(True)
+Gui.frmMain.GsGCData.Visible(True)
+Gui.frmMain.GsGCData.Zorder(0)
+Gui.frmMain.GsGCData.Size(1089,710)
+Gui.frmMain.GsGCData.Position(0,0)
+Gui.frmMain.GsGCData.Dock(5)
+Gui.frmMain.GsGCData.Anchor(15)
+Gui.frmMain.GsGCData.Event(RowCellClick,GsGCData_RowCellClick)
+Program.Sub.ScreenSU.End
+
+Program.Sub.Preflight.Start
+	V.Global.sGridViews.Declare
+	V.Global.sSQL.Declare
+Program.External.Include.Library("GCG_6280_UniversalFunctions.lib")
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+'by Josh Withrow
+'If something breaks, contact Paul.
+
+Function.Intrinsic.UI.UsePixels ' Allows you to use Pixels instead of Twips throughout
+
+'*************************************************************************************************
+'************* Start Dashboard Template Stuff
+
+'REQUIRED/OPTIONAL...
+'Set main form title here.  Could be handled in the forms designer, too...
+'If you set this in the forms designer, make sure this line is commented.
+'Gui.frmMain..Caption("Gridview Template")
+
+'REQUIRED...
+'Set list of controls (grids) that should have their preferences saved.  You know, so they grids load the same way the user left them.
+'FORMNAME*!*CONTROLNAME*!*GRIDVIEWNAME#$#form*!*gsgridcontrol*!*gridview#$#etc*!*etc*!*etc
+'Wash/rinse/repeat for each gridview that you want to store.
+'If there is only one gridview to maintain, only supply the single reference.
+V.Global.sGridViews.Set("frmMain*!*GsGCData*!*gvData")
+'V.Global.sGridViews.Set("frmMain*!*GsGCWindMachines*!*gvWindMachines#$#frmMain*!*GsGCShakers*!*gvShakers")
+
+'IGNORE...
+'Set ARC ID
+'Grabs the ARCID from the filename for use with saving/restoring grid preferences.  So make sure you stick with the file naming convention!
+'Typical file naming convention: DDD_IIII_Description.g2u
+'DDD=Department (GCG, ATG, GAB, etc.)
+'IIII=Reserved ARC ID (5849, 1234, whatever)
+'Description=Short Description of Project
+'Example: GCG_5849_UltimateDashboard.g2u
+F.Intrinsic.Control.CallSub(SetARCID)
+
+'Open DB Connection
+F.ODBC.Connection!con.OpenCompanyConnection(500)
+
+'************* End Dashboard Template Stuff
+'*************************************************************************************************
+
+'Everything beyond this point isn't tied to the "template", but is project specific programming.
+
+'Make the main form visible
+Gui.frmMain..Visible(True)
+
+'Set SQL query to load data into the grid...
+'SQL Query...  drives everything!
+'A column alias of @Part, @SO, @PO, @WO (just empty column with that heading) will produce a document control link to that entity, and when clicked will launch document control to that item.  
+'A column alias of Part, SO, PO, or WO produce a blue text hyperlink column that, when clicked, lauches S&D, SO View, PO View, or WO View respectively to that entity.  
+'No programming.  Just dropping the appropriate columns into your query(s).
+'
+'Some ground rules...
+'Any PART column that you want to be a link must be aliased to PART, and it must be fully trimmed (no whitespace on either side).  
+' -- Also, LOCATION must be in the query (even if it's not on-screen), too, and must be aliased to LOCATION, LOCN, or LOC.  As long as the column exists 
+'Any SALES ORDER number field that you want to be a link must be aliased to SO
+'Any PURCHASE ORDER number field that you want to be a link must be aliased to PO
+'Any WORK ORDER number field that you want to be a link must have JOB and SUFFIX concatenated together with a hyphen between them. must be aliased to WO
+' -- CASE WHEN SUFFIX='' THEN JOB ELSE JOB+'-'+SUFFIX END AS WO
+'
+'V.Global.sSQL.Set("select '' '@PART', Ltrim(Rtrim(PART)) PART, LOCATION, PRODUCT_LINE, DESCRIPTION from V_INVENTORY_ALL order by PART, LOCATION")
+
+
+'V.Global.sSQL.Set("select '' as '@Part', A.PART, A.LOCATION, A.DESCRIPTION, A.BIN, IFNULL(sum(B.QUANTITY),'0.0000') AS DEFAULT_BIN_QTY, A.STOCK_BIN, IFNULL(A.QTY_SAFETY,'0.0000') AS SAFETY_STOCK_QTY from V_INVENTORY_ALL A left outer join V_ITEM_MASTER B ON A.PART=B.PART and A.LOCATION=B.LOCATION AND A.BIN=B.BIN AND A.BIN<>'' group by A.PART, A.LOCATION, A.DESCRIPTION, A.BIN, A.STOCK_BIN, A.QTY_SAFETY")
+
+F.Intrinsic.Control.CallSub(DataLoader)
+
+'load grid preferences
+'technically template stuff.
+F.Intrinsic.Control.CallSub(Deserialize)
+
+Program.Sub.Main.End
+
+Program.Sub.frmMain_UnLoad.Start
+	F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+		
+		F.Intrinsic.Control.CallSub(Serialize)
+		F.Intrinsic.Control.If(V.DataTable.dtData.Exists)
+			F.Data.DataTable.Close("dtData")
+		F.Intrinsic.Control.EndIf
+		
+		F.ODBC.Connection!con.Close
+		F.Intrinsic.Control.End
+		
+	F.Intrinsic.Control.Catch
+		F.Intrinsic.Control.CallSub(Catching,"Sub",V.Ambient.CurrentSubroutine,"ErrorNo",V.Ambient.ErrorNumber,"ErrorDesc",V.Ambient.ErrorDescription) 
+	F.Intrinsic.Control.EndTry
+Program.Sub.frmMain_UnLoad.End
+
+Program.Sub.frmMain_ExportClick.Start
+	F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+		
+		F.Intrinsic.Control.CallSub(ExportGrid,"sGridControls","frmMain*!*GsGCData")
+		
+	F.Intrinsic.Control.Catch
+		F.Intrinsic.Control.CallSub(Catching,"Sub",V.Ambient.CurrentSubroutine,"ErrorNo",V.Ambient.ErrorNumber,"ErrorDesc",V.Ambient.ErrorDescription) 
+	F.Intrinsic.Control.EndTry
+Program.Sub.frmMain_ExportClick.End
+
+Program.Sub.frmMain_RefreshClick.Start
+F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+		
+		F.Intrinsic.Control.CallSub(Serialize)
+		F.Intrinsic.Control.CallSub(DataLoader)
+		F.Intrinsic.Control.CallSub(Deserialize)
+		
+	F.Intrinsic.Control.Catch
+		F.Intrinsic.Control.CallSub(Catching,"Sub",V.Ambient.CurrentSubroutine,"ErrorNo",V.Ambient.ErrorNumber,"ErrorDesc",V.Ambient.ErrorDescription) 
+	F.Intrinsic.Control.EndTry
+Program.Sub.frmMain_RefreshClick.End
+
+Program.Sub.frmMain_UserButtonClicked.Start
+	F.Intrinsic.Control.Try
+	V.Local.sError.Declare
+		
+		'V.ARGS.BUTTON: ButtonName of the button clicked (not the text/caption, but the control name)...
+		'From ScreenSU...
+		'                           ButtonName
+		'                           \/
+		'Gui.frmMain..BarAddButton("ResetColumns","Reset Columns",V.Enum.Image!LAYOUT_RESET_COLOR)
+		
+		F.Intrinsic.Control.SelectCase(V.Args.Button)
+			
+			F.Intrinsic.Control.Case("ResetGridLayout")
+				F.Intrinsic.Control.CallSub(ResetGrid,"sGridViewName","GVData")
+				F.Intrinsic.Control.CallSub(DataLoader)
+				'F.Intrinsic.Control.CallSub(LoadData, "sDataTableName","dtData","sFormName","frmMain","sGridControlName","GsGCData","sGridViewName","gvData","sSQL",V.Global.sSQL)
+				F.Intrinsic.Control.CallSub(Deserialize)
+				
+			F.Intrinsic.Control.Case("SaveGridLayout")
+				F.Intrinsic.Control.CallSub(Serialize)
+				
+		F.Intrinsic.Control.EndSelect
+	
+	F.Intrinsic.Control.Catch
+		F.Intrinsic.Control.CallSub(Catching,"Sub",V.Ambient.CurrentSubroutine,"ErrorNo",V.Ambient.ErrorNumber,"ErrorDesc",V.Ambient.ErrorDescription) 
+	F.Intrinsic.Control.EndTry
+Program.Sub.frmMain_UserButtonClicked.End
+
+Program.Sub.DataLoader.Start
+	
+	'Get data and load into grid(s)
+	'                                                                           Name of form where GridControl lives                     Name of Gridview (usually just the same name as GridControl or DataTable, but with gv prefix)
+	'                                                                           |                                                        |
+	'                                                      Name of DataTable    |                             Name of GridControl to load data into      Basis (SQL query) to load into the grid                                                        If you want to include/wrap the suspend layout in this call, set to TRUE.  Or, if you want to set it manually around it, set it to False.
+	'                                                      \/                   \/                            \/                         \/              \/                                                                                             \/                
+	'F.Intrinsic.Control.CallSub(LoadData,"sDataTableName","dtData","sFormName","frmMain","sGridControlName","GsGCData","sGridViewName","gvData","sSQL","select PART, LOCATION, PRODUCT_LINE, DESCRIPTION from V_INVENTORY_ALL order by PART, LOCATION","bSuspendLayout",True)
+	
+	'Set SQL query to load data into the grid...
+	'SQL Query...  drives everything!
+	'A column alias of @Part, @SO, @PO, @WO (just empty column with that heading) will produce a document control link to that entity, and when clicked will launch document control to that item.  
+	'A column alias of Part, SO, PO, or WO produce a blue text hyperlink column that, when clicked, lauches S&D, SO View, PO View, or WO View respectively to that entity.  
+	'No programming.  Just dropping the appropriate columns into your query(s).
+	'
+	'Some ground rules...
+	'Any PART column that you want to be a link must be aliased to PART, and it must be fully trimmed (no whitespace on either side).  
+	' -- Also, LOCATION must be in the query (even if it's not on-screen), too, and must be named LOCATION, LOCN, or LOC.
+	'Any SALES ORDER number field that you want to be a link must be aliased to SO
+	'Any PURCHASE ORDER number field that you want to be a link must be aliased to PO
+	'Any WORK ORDER number field that you want to be a link must have JOB and SUFFIX concatenated together with a hyphen between them. must be aliased to WO
+	' -- CASE WHEN SUFFIX='' THEN JOB ELSE JOB+'-'+SUFFIX END AS WO
+	F.Intrinsic.Control.BlockEvents
+	
+	F.Intrinsic.Control.If(V.DataTable.dtData.Exists)
+		F.Data.DataTable.Close("dtData")
+	F.Intrinsic.Control.EndIf
+	
+	F.Data.DataTable.CreateFromSQL("dtInvAll","con","Select PART,LOCATION,DESCRIPTION,BIN,STOCK_BIN,IFNULL(QTY_SAFETY,'0.0000') AS SAFETY_STOCK_QTY From V_INVENTORY_ALL",True)
+
+	F.Data.DataTable.CreateFromSQL("dtItemMstr","con","Select PART,LOCATION,BIN,IFNULL(sum(QUANTITY),'0.0000') AS QTY from V_ITEM_MASTER group by PART,LOCATION,BIN",True)
+
+	F.Data.Linq.Join("LeftJoin","DataTable","dtInvAll*!*A","DataTable","dtItemMstr*!*B","A.Part = B.Part and A.Location = B.Location and A.Bin = B.Bin","DataTable","dtItemMstr*!*C","A.Part = C.Part and A.Location = C.Location and A.Stock_Bin = C.Bin","A.PART*!*A.LOCATION*!*A.DESCRIPTION*!*A.BIN*!*B.QTY*!*A.STOCK_BIN*!*C.QTY*!*A.SAFETY_STOCK_QTY",,,,"dtData",True)
+	
+	'A.BIN <> '' A.STOCK_BIN <> ''
+	
+	F.Data.DataTable.Close("dtInvAll")
+	F.Data.DataTable.Close("dtItemMstr")
+
+	F.Intrinsic.Control.CallSub(LoadGV,"DT","dtData","GV","gvData","GSGC","GsGCData","FRM","frmMain")
+	
+	'F.Intrinsic.Control.CallSub(LoadData, "sDataTableName","dtData","sFormName","frmMain","sGridControlName","GsGCData","sGridViewName","gvData","sSQL",V.Global.sSQL,"bSuspendLayout",True)
+	
+	'Additional Grid Formatting Options...  and anything else that you need to tack onto the project revolving around the grid.
+	'Gui.frmMain.GsGCData.SetGridviewProperty("gvData","EXPANDALLGROUPS",True)
+	'Gui.frmMain.GsGCData.SetColumnProperty("gvData","WORKCENTER","GROUPINDEX",0) 
+	'Gui.frmMain.GsGCData.SetColumnProperty("gvData","PULLED","CellBackColor","LightYellow")
+	'Gui.frmMain.GsGCData.SetColumnProperty("gvData","EST_HRS","DisplayCustomNumeric","#,###,###,##0.00")
+	'Gui.frmMain.GsGCData.SetColumnProperty("gvData","DATE_START","DisplayCustomDatetime","d")
+	'Gui.frmMain.GsGCData.AddSummaryItem("gvData","SEQ_ACT_HRS","SUM_SEQ_ACT_HRS","Sum","","","n")
+	
+	Gui.frmMain.GsGCData.SetGridviewProperty("gvData","OptionsViewShowFilterPanelMode","Always")
+	Gui.frmMain.GsGCData.SetGridviewProperty("gvData","OptionsFilterUseNewCustomFilterDialog",True)
+	Gui.frmMain.GsGCData.SetGridviewProperty("gvData","ActiveFilterString","[QTY] < [QTY1]")
+	
+	Gui.frmMain.GsGCData.SetColumnProperty("gvData","QTY","Caption","Default Bin Qty")
+	Gui.frmMain.GsGCData.SetColumnProperty("gvData","QTY1","Caption","Stock Bin Qty")
+	
+	
+	Gui.frmMain.GsGCData.SetColumnProperty("gvData","QTY","DisplayCustomNumeric","#,###,###,##0.0000")
+	Gui.frmMain.GsGCData.SetColumnProperty("gvData","QTY1","DisplayCustomNumeric","#,###,###,##0.0000")
+	Gui.frmMain.GsGCData.SetColumnProperty("gvData","SAFETY_STOCK_QTY","DisplayCustomNumeric","#,###,###,##0.0000")
+	
+	Gui.frmMain.GsGCData.SetColumnProperty("gvData","QTY","CellHAlignment","far")
+	Gui.frmMain.GsGCData.SetColumnProperty("gvData","QTY1","CellHAlignment","far")
+	Gui.frmMain.GsGCData.SetColumnProperty("gvData","SAFETY_STOCK_QTY","CellHAlignment","far")
+	
+	F.Intrinsic.Control.UnBlockEvents
+Program.Sub.DataLoader.End
+
+Program.Sub.GsGCData_RowCellClick.Start
+	'V.Args.Screen: FRMMAIN
+	'V.Args.ControlName:GSGCDATA0
+	'V.Args.EventType: ROWCELLCLICK
+	'V.Args.Column: @Part
+	'V.Args.RowIndex: 0
+	
+	'This sub call will handle all of the basic built in core data entity stuff...
+	'linking to S&D, PO View, SO View, WO View, and DCS Linking
+	'@Part, @SO, @PO, @WO, PART, SO, PO, WO columns all handled in the basic sense.
+	F.Intrinsic.Control.CallSub(GetActiveGridView,"ControlName",V.Args.ControlName)
+	F.Intrinsic.Control.CallSub(RowCellClick_HandleCoreEntity, "Screen", V.Args.Screen, "ControlName", V.Args.ControlName, "EventType", V.Args.EventType, "Column", V.Args.Column, "RowIndex", V.Args.RowIndex, "GridView", V.Args.GridView)
+	
+	'Handle anything not handled...
+	'F.Intrinsic.Control.SelectCase(V.Args.Column.UCase)
+	'	F.Intrinsic.Control.Case("Column Name")
+	'		'Do awesome stuff...
+	'	F.Intrinsic.Control.Case("Column Name 2")
+	'		'Do GNARLY STUFF!
+	'F.Intrinsic.Control.EndSelect
+Program.Sub.GsGCData_RowCellClick.End
+
+Program.Sub.Comments.Start
+${$5$}$3.0.0.0$}$1
+${$6$}$sstanka$}$20210506160847027$}$mP+zz5Tw3sT2/nyap+FbWm4triMPqjXDdjnz31N6ler0KFCznbgV0BwkMoWGJw7O3YSNtcGXR0Q=
+Program.Sub.Comments.End
